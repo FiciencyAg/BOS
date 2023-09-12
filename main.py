@@ -10,6 +10,7 @@ import camera
 from circuitpython_nrf24l01.rf24 import RF24
 from adafruit_bmp3xx import BMP3XX_I2C
 from adafruit_mpu6050 import MPU6050
+import gnss
 
 # SD Card and Camera setup
 SD = sdioio.SDCard(
@@ -29,6 +30,9 @@ IMU = MPU6050(I2C)
 RADIO_ENABLE = digitalio.DigitalInOut(board.D10)
 RADIO_SELECT = digitalio.DigitalInOut(board.D9)
 RADIO_BUS = board.SPI()
+
+# GPS setup
+GPS = gnss.GNSS([gnss.SatelliteSystem.GPS, gnss.SatelliteSystem.GLONASS])
 
 # Output Pins. D7 + D6 (Ext Board)
 AIR_PUMP = digitalio.DigitalInOut(board.D7)
@@ -51,11 +55,15 @@ class SensorValues:
         self.gyro_y = 0
         self.gyro_z = 0
 
+        # GPS Values
+        self.gps_latitude = 0
+        self.gps_longitude = 0
+
 
 async def read_sensors(sensor_values):
     while True:
         # Let another task run
-        await asyncio.sleep(0)
+        await asyncio.sleep(1)
 
         # Read Task
         sensor_values.altitude_m = BAROMETER.temperature
@@ -69,6 +77,10 @@ async def read_sensors(sensor_values):
         sensor_values.gyro_y = IMU.gyro[1]
         sensor_values.gyro_z = IMU.gyro[2]
 
+        GPS.update()
+        sensor_values.gps_latitude = GPS.latitude
+        sensor_values.gps_longitude = GPS.longitude
+
 
 async def radio(sensor_values):
     nrf = RF24(RADIO_BUS, RADIO_SELECT, RADIO_ENABLE)
@@ -77,11 +89,12 @@ async def radio(sensor_values):
     nrf.open_tx_pipe(address[0])
     nrf.open_rx_pipe(1, address[1])
 
-    payload_out = [sensor_values.altitude_m, sensor_values.temp_c]
+    payload_out = [sensor_values.gps_latitude, sensor_values.gps_longitude,
+                   sensor_values.altitude_m, sensor_values.temp_c]
 
     while True:
         # Let another task run
-        await asyncio.sleep(0)
+        await asyncio.sleep(1)
 
         # Master Task
         nrf.listen = False
